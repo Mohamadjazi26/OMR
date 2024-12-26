@@ -1,13 +1,50 @@
 import pathlib
 import typing as tp
+from time import sleep
 import cv2
 import numpy as np
 from numpy import ma
 import geometry_utils
-import argparse
-from pathlib import Path
+from pyzbar.pyzbar import decode
 
 SUPPORTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"]
+
+def detect_and_remove_logo(image: np.ndarray,
+                           save_path: tp.Optional[pathlib.PurePath] = None
+                           ) -> np.ndarray:
+
+    template = cv2.imread('./Template/logo.png', 0)
+    img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    res = cv2.matchTemplate(img, template, cv2.TM_CCOEFF_NORMED)
+    min_value, max_value, min_loc, max_loc = cv2.minMaxLoc(res)
+
+    (startX, startY) = max_loc
+    (endX, endY) = (startX + template.shape[1], startY + template.shape[0])
+    img[startY:endY, startX:endX] = 255
+
+    result = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    if save_path:
+        save_image(save_path / "delete logo.jpg", result)
+    return result
+
+def detect_and_decode_barcode(image: np.ndarray,
+                              save_path: tp.Optional[pathlib.PurePath] = None) -> np.ndarray:
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    barcodes = decode(gray)
+    barcode_data = ""
+    for barcode in barcodes:
+        barcode_data = barcode.data.decode("utf-8")
+        barcode_type = barcode.type
+        (x, y, w, h) = barcode.rect
+        cv2.rectangle(gray, (x, y), (x + w, y + h), (255, 0, 0), -1)
+        # cv2.rectangle(gray, (x, y), (x + w, y + h), (0, 255, 0), -1)
+    result = cv2.cvtColor(gray, cv2.COLOR_BGR2RGB)
+
+    if save_path:
+        save_image(save_path / "debarcode.jpg", result)
+    return result
 
 def convert_to_grayscale(image: np.ndarray,
                          save_path: tp.Optional[pathlib.PurePath] = None
@@ -51,6 +88,7 @@ def find_contours(edges: np.ndarray) -> np.ndarray:
 
 def get_image(path: pathlib.PurePath,
               save_path: tp.Optional[pathlib.PurePath] = None) -> np.ndarray:
+
     result = cv2.imread(str(path))
     if save_path:
         save_image(save_path / "original.jpg", result)

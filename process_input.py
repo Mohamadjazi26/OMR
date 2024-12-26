@@ -53,7 +53,11 @@ def process_input(
             else:
                 print(f"Processing '{image_path.name}'.")
 
-            image = image_utils.get_image(image_path, save_path=debug_path)
+            img = image_utils.get_image(image_path, save_path=debug_path)
+
+            img_delogo = image_utils.detect_and_remove_logo(img, save_path=debug_path)
+            image = image_utils.detect_and_decode_barcode(img_delogo, save_path=debug_path)
+
             prepared_image = image_utils.prepare_scan_for_processing(
                 image, save_path=debug_path)
 
@@ -104,7 +108,6 @@ def process_input(
             field_data: tp.Dict[grid_i.RealOrVirtualField, str] = {
                 grid_i.Field.IMAGE_FILE: image_path.name,
             }
-
             #---------------------------------------------------------------------------
             #Read the Student ID. If it indicates this exam is a key, treat it as such
             student_id = grid_r.read_field_as_string(
