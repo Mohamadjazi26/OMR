@@ -1,4 +1,6 @@
 import typing as tp
+from time import sleep
+
 import numpy as np
 import geometry_utils
 import image_utils
@@ -187,212 +189,62 @@ def find_corner_marks(image: np.ndarray,
         geometry_utils.Polygon] = image_utils.find_polygons(
             image, save_path=save_path)
 
-    hexagons: tp.List[geometry_utils.Polygon] = []
-    quadrilaterals: tp.List[geometry_utils.Polygon] = []
-
-    for poly in all_polygons:
-        if len(poly) == 6:
-            hexagons.append(poly)
-        elif len(poly) == 4 : #and geometry_utils.all_approx_square(poly)
-            quadrilaterals.append(poly)
-
+    quadrilaterals: tp.List[geometry_utils.Polygon] = [
+        poly for poly in all_polygons if len(poly) == 4 and geometry_utils.all_approx_square(poly)
+    ]
+    
     if save_path:
-        image_utils.draw_polygons(image, hexagons, save_path / "all_hexagons.jpg")
         image_utils.draw_polygons(image, quadrilaterals, save_path / "all_quadrilaterals.jpg")
 
 
-    for i in range(len(hexagons)):
-        hexagon = hexagons[i]
+    top_squares = []
+    bottom_squares = []
 
-        try:
-            l_mark = LMark(hexagon)
-        except WrongShapeError:
-            continue
 
-        basis_transformer = geometry_utils.ChangeOfBasisTransformer(
-            l_mark.polygon[0], l_mark.polygon[5], l_mark.polygon[4])
+    centroids = [
+        (geometry_utils.guess_centroid(poly), poly)
+        for poly in quadrilaterals
+    ]
 
-        nominal_to_right_side = 50 - 0.5
-        # nominal_to_left_side = 0.5
-        nominal_to_bottom = ((64 - 0.5) / 2)
+    sorted_centroids = sorted(centroids, key=lambda c: c[0].y)
 
-        x_tolerance = 0.2 * nominal_to_right_side
-        y_tolerance = 0.2 * nominal_to_bottom
+    # Group top and bottom squares based on their y-coordinates
+    top_squares = sorted_centroids[:2]
+    bottom_squares = sorted_centroids[2:]
+    print(len(top_squares))
+    print(len(bottom_squares))
+    if len(top_squares) != 2 or len(bottom_squares) != 2:
+        raise CornerFindingError("Could not find the required four squares.")
 
-        if save_path:
-            nominal_poly_new_basis = [
-                geometry_utils.Point(0.0, 0.0),
-                geometry_utils.Point(nominal_to_right_side, 0.0),
-                geometry_utils.Point(nominal_to_right_side, nominal_to_bottom),
-                geometry_utils.Point(0.0, nominal_to_bottom)
-            ]
-            # Boxes within which corner centroids can be found
-            corner_tolerance_polys_new_basis = [
-                [
-                    geometry_utils.Point(x + x_tolerance, y - y_tolerance),
-                    geometry_utils.Point(x + x_tolerance, y + y_tolerance),
-                    geometry_utils.Point(x - x_tolerance, y + y_tolerance),
-                    geometry_utils.Point(x - x_tolerance, y - y_tolerance)
-                ] for [x, y] in [
-                    # [nominal_to_left_side, 0.5],  # Top-left
-                    [nominal_to_right_side, 0.5],
-                    [nominal_to_right_side, nominal_to_bottom],
-                    [0.5, nominal_to_bottom]
+    # Ensure squares are ordered by x-coordinate within each group
+    top_squares = sorted(top_squares, key=lambda c: c[0].x)
+    bottom_squares = sorted(bottom_squares, key=lambda c: c[0].x)
 
-                ]
-            ]
-            polys = [basis_transformer.poly_from_basis(nominal_poly_new_basis), hexagon] + [
-                basis_transformer.poly_from_basis(p) for p in corner_tolerance_polys_new_basis
-            ]
-            image_utils.draw_polygons(
-                image,
-                polys,
-                save_path / f"grid_corner_tolerances_{i}.png",
-                thickness=2
-            )
+    grid_corners = [
+        top_squares[0][1][0],  # Top-left
+        top_squares[1][1][0],  # Top-right
+        bottom_squares[1][1][0],  # Bottom-right
+        bottom_squares[0][1][0]  # Bottom-left
+    ]
+    print(len(grid_corners))
+    sleep(20)
+    # top_left_corner = l_mark.polygon[0]
+    # top_right_corner = geometry_utils.get_corner_wrt_basis(
+    #     top_right_squares[0].polygon, geometry_utils.Corner.TR, basis_transformer)
+    # bottom_right_corner = geometry_utils.get_corner_wrt_basis(
+    #     bottom_right_squares[0].polygon, geometry_utils.Corner.BR, basis_transformer)
+    # bottom_left_corner = geometry_utils.get_corner_wrt_basis(
+    #     bottom_left_squares[0].polygon, geometry_utils.Corner.BL, basis_transformer)
 
-        # top_left_squares = []
-        top_right_squares = []
-        bottom_left_squares = []
-        bottom_right_squares = []
-        for quadrilateral in quadrilaterals:
-            try:
-                square = SquareMark(quadrilateral, l_mark.unit_length)
-            except WrongShapeError:
-                continue
-            centroid = geometry_utils.guess_centroid(square.polygon)
-            centroid_new_basis = basis_transformer.to_basis(centroid)
+    # grid_corners = [
+    #     top_left_corner, top_right_corner,
+    #     bottom_right_corner, bottom_left_corner
+    # ]
 
-            if math_utils.is_within_tolerance(
-                    centroid_new_basis.x, nominal_to_right_side,
-                    x_tolerance) and math_utils.is_within_tolerance(
-                        centroid_new_basis.y, 0.5, y_tolerance):
-                top_right_squares.append(square)
-            elif math_utils.is_within_tolerance(
-                    centroid_new_basis.x, 0.5,
-                    x_tolerance) and math_utils.is_within_tolerance(
-                        centroid_new_basis.y, nominal_to_bottom, y_tolerance):
-                bottom_left_squares.append(square)
-            elif math_utils.is_within_tolerance(
-                    centroid_new_basis.x, nominal_to_right_side,
-                    x_tolerance) and math_utils.is_within_tolerance(
-                        centroid_new_basis.y, nominal_to_bottom, y_tolerance):
-                bottom_right_squares.append(square)
+    # Corners [top-left, top-right, bottom-right, bottom-left]
+    if save_path:
+        image_utils.draw_polygons(image, [grid_corners], save_path / "grid_limits.jpg")
 
-        if len(top_right_squares) == 0 or len(bottom_left_squares) == 0 or len(
-                bottom_right_squares) == 0:
-            continue
+    return grid_corners
 
-        #--------------------------------------------------------------------------------------------
-        # top_left_squares = []
-        # top_right_squares = []
-        # bottom_left_squares = []
-        # bottom_right_squares = []
 
-        # for quadrilateral in quadrilaterals:
-        #     try:
-        #         square = SquareMark(quadrilateral, l_mark.unit_length)
-        #     except WrongShapeError:
-        #         continue
-        #     centroid = geometry_utils.guess_centroid(square.polygon)
-        #     centroid_new_basis = basis_transformer.to_basis(centroid)
-        #
-        #     if math_utils.is_within_tolerance(centroid_new_basis.x, 0.5, x_tolerance) and \
-        #             math_utils.is_within_tolerance(centroid_new_basis.y, 0.5, y_tolerance):
-        #         top_left_squares.append(square)
-        #         break
-        #
-        #     if math_utils.is_within_tolerance(
-        #             centroid_new_basis.x, nominal_to_left_side,
-        #             x_tolerance) and math_utils.is_within_tolerance(
-        #         centroid_new_basis.y, 0.5, y_tolerance):
-        #         top_right_squares.append(square)
-        #         break  # Stop searching after finding one
-        #
-        # # Find top-right square
-        # for quadrilateral in quadrilaterals:
-        #     try:
-        #         square = SquareMark(quadrilateral, l_mark.unit_length)
-        #     except WrongShapeError:
-        #         continue
-        #     centroid = geometry_utils.guess_centroid(square.polygon)
-        #     centroid_new_basis = basis_transformer.to_basis(centroid)
-        #
-        #     if math_utils.is_within_tolerance(centroid_new_basis.x, 0.5, x_tolerance) and \
-        #             math_utils.is_within_tolerance(centroid_new_basis.y, 0.5, y_tolerance):
-        #         top_left_squares.append(square)
-        #         break
-        #
-        #     if math_utils.is_within_tolerance(
-        #             centroid_new_basis.x, nominal_to_right_side,
-        #             x_tolerance) and math_utils.is_within_tolerance(
-        #         centroid_new_basis.y, 0.5, y_tolerance):
-        #         top_right_squares.append(square)
-        #         break  # Stop searching after finding one
-        #
-        # # Find bottom-left square, ensuring it's roughly equidistant from the top-right
-        # for quadrilateral in quadrilaterals:
-        #     if not top_right_squares:
-        #         continue  # Skip if no top-right square found
-        #     try:
-        #         square = SquareMark(quadrilateral, l_mark.unit_length)
-        #     except WrongShapeError:
-        #         continue
-        #     centroid = geometry_utils.guess_centroid(square.polygon)
-        #     centroid_new_basis = basis_transformer.to_basis(centroid)
-        #
-        #     if math_utils.is_within_tolerance(
-        #             centroid_new_basis.x, 0.5,
-        #             x_tolerance) and math_utils.is_within_tolerance(
-        #         centroid_new_basis.y, nominal_to_bottom, y_tolerance):
-        #         top_right_centroid = basis_transformer.to_basis(
-        #             top_right_squares[0].polygon[0])
-        #         distance_y = abs(top_right_centroid.y - centroid_new_basis.y)
-        #         if math_utils.is_approx_equal(distance_y, nominal_to_bottom / 2, tolerance=y_tolerance):
-        #             bottom_left_squares.append(square)
-        #             break  # Stop searching after finding one
-        #
-        # # Find bottom-right square (similar logic to bottom-left)
-        # for quadrilateral in quadrilaterals:
-        #     if not top_right_squares or not bottom_left_squares:
-        #         continue
-        #     try:
-        #         square = SquareMark(quadrilateral, l_mark.unit_length)
-        #     except WrongShapeError:
-        #         continue
-        #     centroid = geometry_utils.guess_centroid(square.polygon)
-        #     centroid_new_basis = basis_transformer.to_basis(centroid)
-        #
-        #     if math_utils.is_within_tolerance(
-        #             centroid_new_basis.x, nominal_to_right_side,
-        #             x_tolerance) and math_utils.is_within_tolerance(
-        #         centroid_new_basis.y, nominal_to_bottom, y_tolerance):
-        #         top_right_centroid = basis_transformer.to_basis(
-        #             top_right_squares[0].polygon[0])
-        #         distance_y = abs(top_right_centroid.y - centroid_new_basis.y)
-        #         if math_utils.is_approx_equal(distance_y, nominal_to_bottom / 2, tolerance=y_tolerance):
-        #             bottom_right_squares.append(square)
-        #             break
-
-        #--------------------------------------------------------------------------------------------
-
-        top_left_corner = l_mark.polygon[0]
-        # top_left_corner = geometry_utils.get_corner_wrt_basis(
-        #     top_left_squares[0].polygon, geometry_utils.Corner.TL, basis_transformer)
-        top_right_corner = geometry_utils.get_corner_wrt_basis(
-            top_right_squares[0].polygon, geometry_utils.Corner.TR, basis_transformer)
-        bottom_right_corner = geometry_utils.get_corner_wrt_basis(
-            bottom_right_squares[0].polygon, geometry_utils.Corner.BR, basis_transformer)
-        bottom_left_corner = geometry_utils.get_corner_wrt_basis(
-            bottom_left_squares[0].polygon, geometry_utils.Corner.BL, basis_transformer)
-
-        grid_corners = [
-            top_left_corner,     top_right_corner,
-            bottom_right_corner, bottom_left_corner
-        ]
-
-        if save_path:
-            image_utils.draw_polygons(image, [grid_corners], save_path / "grid_limits.jpg")
-
-        return grid_corners
-    raise CornerFindingError("Couldn't find document corners.")

@@ -99,15 +99,64 @@ def save_image(path: pathlib.PurePath, image: np.ndarray):
     cv2.imwrite(str(path), image)
 
 
+def find_template_in_paper(image: np.ndarray,
+                           save_path: tp.Optional[pathlib.PurePath] = None
+                           ) -> np.ndarray:
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # image = cv2.imread(image)
+    img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    templates = [
+        cv2.imread('Template/top_left.jpg', 0),
+        cv2.imread('Template/top_right.jpg', 0),
+        cv2.imread('Template/bottom_left.jpg', 0),
+        cv2.imread('Template/bottom_right.jpg', 0)
+    ]
+    rectangles = []
+
+    for template in templates:
+        res = cv2.matchTemplate(img, template, cv2.TM_CCOEFF_NORMED)
+        min_value, max_value, min_loc, max_loc = cv2.minMaxLoc(res)
+
+        (startX, startY) = max_loc
+        (endX, endY) = (startX + template.shape[1], startY + template.shape[0])
+
+        cv2.rectangle(img, (startX, startY), (endX, endY), (0, 0, 255),
+                      2)  # Draw a red rectangle around the detected area
+        rectangles.append((startX, startY, endX - startX, endY - startY))
+
+    result = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # cv2.imwrite('Template/result.jpg', result)
+    if save_path:
+        save_image(save_path / "temp.jpg", result)
+    return result, rectangles
+
+
 def find_polygons(image: np.ndarray,
                   save_path: tp.Optional[pathlib.PurePath] = None
                   ) -> tp.List[geometry_utils.Polygon]:
-    edges = detect_edges(image, save_path=save_path)
-    all_contours = find_contours(edges)
-    polygons = [
-        geometry_utils.approx_poly(contour) for contour in all_contours
-    ]
+    # img = get_image(image)
+    image, rectangles = find_template_in_paper(image)
+    polygons = []
+    for rect in rectangles:
+        x, y, w, h = rect
+        roi = image[y:y + h, x:x + w]  # Extract the region of interest (ROI)
+        edges = detect_edges(roi, save_path=save_path)
+        all_contours = find_contours(edges)
+        polygons.extend(
+            geometry_utils.approx_poly(contour) for contour in all_contours
+        )
+    print(len(polygons))
     return polygons
+
+# def find_polygons(image: np.ndarray,
+#                   save_path: tp.Optional[pathlib.PurePath] = None
+#                   ) -> tp.List[geometry_utils.Polygon]:
+#     edges = detect_edges(image, save_path=save_path)
+#     all_contours = find_contours(edges)
+#     polygons = [
+#         geometry_utils.approx_poly(contour) for contour in all_contours
+#     ]
+#     return polygons
 
 
 def get_dimensions(image: np.ndarray) -> tp.Tuple[int, int]:
