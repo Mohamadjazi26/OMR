@@ -15,7 +15,7 @@ import image_utils
 import list_utils
 
 
-GRID_CELL_CROP_FRACTION = 0.20
+GRID_CELL_CROP_FRACTION = 0.05
 
 Polygon = tp.List[geometry_utils.Point]
 

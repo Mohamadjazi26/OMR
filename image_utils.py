@@ -30,17 +30,18 @@ def detect_and_remove_logo(image: np.ndarray,
     return result
 
 
+barcode_data = None
+
 def detect_and_decode_barcode(image: np.ndarray,
                               save_path: tp.Optional[pathlib.PurePath] = None) -> np.ndarray:
+    global barcode_data
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     barcodes = decode(gray)
-    global barcode_data
     for barcode in barcodes:
         barcode_data = barcode.data.decode("utf-8")
         barcode_type = barcode.type
         (x, y, w, h) = barcode.rect
         cv2.rectangle(gray, (x, y), (x + w, y + h), (255, 0, 0), -1)
-        # cv2.rectangle(gray, (x, y), (x + w, y + h), (0, 255, 0), -1)
     result = cv2.cvtColor(gray, cv2.COLOR_BGR2RGB)
 
     if save_path:
