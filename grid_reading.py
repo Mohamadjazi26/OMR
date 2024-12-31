@@ -15,7 +15,7 @@ import image_utils
 import list_utils
 
 
-GRID_CELL_CROP_FRACTION = 0.05
+GRID_CELL_CROP_FRACTION = 0.20
 
 Polygon = tp.List[geometry_utils.Point]
 
@@ -37,7 +37,7 @@ class Grid:
         self.horizontal_cells = horizontal_cells
         self.vertical_cells = vertical_cells
         self.basis_transformer = geometry_utils.ChangeOfBasisTransformer(
-            corners[0], corners[3], corners[2])
+            corners[1], corners[2], corners[3])
 
         self.horizontal_cell_size = 1 / self.horizontal_cells
         self.vertical_cell_size = 1 / self.vertical_cells
@@ -305,6 +305,7 @@ def read_field_as_string(field: grid_info.Field, grid: Grid, threshold: float,
         return field_group_to_string(field_group)
     else:
         return None
+
 
 def read_answers(grid: Grid, threshold: float, form_variant: grid_info.FormVariant) -> tp.List[tp.Optional[int]]:
     answer_field_group = MultipleChoiceGridFieldGroup(grid, 3, 21, form_variant.num_questions)

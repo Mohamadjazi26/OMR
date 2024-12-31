@@ -29,11 +29,13 @@ def detect_and_remove_logo(image: np.ndarray,
         save_image(save_path / "delete logo.jpg", result)
     return result
 
+
+
 def detect_and_decode_barcode(image: np.ndarray,
                               save_path: tp.Optional[pathlib.PurePath] = None) -> np.ndarray:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     barcodes = decode(gray)
-    barcode_data = ""
+    global barcode_data
     for barcode in barcodes:
         barcode_data = barcode.data.decode("utf-8")
         barcode_type = barcode.type
@@ -99,54 +101,54 @@ def save_image(path: pathlib.PurePath, image: np.ndarray):
     cv2.imwrite(str(path), image)
 
 
-def find_template_in_paper(image: np.ndarray,
-                           save_path: tp.Optional[pathlib.PurePath] = None
-                           ) -> np.ndarray:
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # image = cv2.imread(image)
-    img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    templates = [
-        cv2.imread('Template/top_left.jpg', 0),
-        cv2.imread('Template/top_right.jpg', 0),
-        cv2.imread('Template/bottom_left.jpg', 0),
-        cv2.imread('Template/bottom_right.jpg', 0)
-    ]
-    rectangles = []
-
-    for template in templates:
-        res = cv2.matchTemplate(img, template, cv2.TM_CCOEFF_NORMED)
-        min_value, max_value, min_loc, max_loc = cv2.minMaxLoc(res)
-
-        (startX, startY) = max_loc
-        (endX, endY) = (startX + template.shape[1], startY + template.shape[0])
-
-        cv2.rectangle(img, (startX, startY), (endX, endY), (0, 0, 255),
-                      2)  # Draw a red rectangle around the detected area
-        rectangles.append((startX, startY, endX - startX, endY - startY))
-
-    result = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # cv2.imwrite('Template/result.jpg', result)
-    if save_path:
-        save_image(save_path / "temp.jpg", result)
-    return result, rectangles
-
-
-def find_polygons(image: np.ndarray,
-                  save_path: tp.Optional[pathlib.PurePath] = None
-                  ) -> tp.List[geometry_utils.Polygon]:
-    # img = get_image(image)
-    image, rectangles = find_template_in_paper(image)
-    polygons = []
-    for rect in rectangles:
-        x, y, w, h = rect
-        roi = image[y:y + h, x:x + w]  # Extract the region of interest (ROI)
-        edges = detect_edges(roi, save_path=save_path)
-        all_contours = find_contours(edges)
-        polygons.extend(
-            geometry_utils.approx_poly(contour) for contour in all_contours
-        )
-    print(len(polygons))
-    return polygons
+# def find_template_in_paper(image: np.ndarray,
+#                            save_path: tp.Optional[pathlib.PurePath] = None
+#                            ) -> np.ndarray:
+#     # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#     # image = cv2.imread(image)
+#     img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#     templates = [
+#         cv2.imread('Template/top_left.jpg', 0),
+#         cv2.imread('Template/top_right.jpg', 0),
+#         cv2.imread('Template/bottom_left.jpg', 0),
+#         cv2.imread('Template/bottom_right.jpg', 0)
+#     ]
+#     rectangles = []
+#
+#     for template in templates:
+#         res = cv2.matchTemplate(img, template, cv2.TM_CCOEFF_NORMED)
+#         min_value, max_value, min_loc, max_loc = cv2.minMaxLoc(res)
+#
+#         (startX, startY) = max_loc
+#         (endX, endY) = (startX + template.shape[1], startY + template.shape[0])
+#
+#         cv2.rectangle(img, (startX, startY), (endX, endY), (0, 0, 255),
+#                       2)  # Draw a red rectangle around the detected area
+#         rectangles.append((startX, startY, endX - startX, endY - startY))
+#
+#     result = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     # cv2.imwrite('Template/result.jpg', result)
+#     if save_path:
+#         save_image(save_path / "temp.jpg", result)
+#     return result, rectangles
+#
+#
+# def find_polygons(image: np.ndarray,
+#                   save_path: tp.Optional[pathlib.PurePath] = None
+#                   ) -> tp.List[geometry_utils.Polygon]:
+#     # img = get_image(image)
+#     image, rectangles = find_template_in_paper(image)
+#     polygons = []
+#     for rect in rectangles:
+#         x, y, w, h = rect
+#         roi = image[y:y + h, x:x + w]  # Extract the region of interest (ROI)
+#         edges = detect_edges(roi, save_path=save_path)
+#         all_contours = find_contours(edges)
+#         polygons.extend(
+#             geometry_utils.approx_poly(contour) for contour in all_contours
+#         )
+#     print(len(polygons))
+#     return polygons
 
 # def find_polygons(image: np.ndarray,
 #                   save_path: tp.Optional[pathlib.PurePath] = None
@@ -157,6 +159,39 @@ def find_polygons(image: np.ndarray,
 #         geometry_utils.approx_poly(contour) for contour in all_contours
 #     ]
 #     return polygons
+
+def find_squares(image):
+    # img_rgb = cv2.imread(image, cv2.IMREAD_COLOR)
+    img_gray = image.copy()
+    # assert img_rgb is not None, "file could not be read, check with os.path.exists()"
+    # img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)
+    template = cv2.imread('./Template/temp0.bmp', cv2.IMREAD_GRAYSCALE)
+    assert template is not None, "file could not be read, check with os.path.exists()"
+    w, h = template.shape[::-1]
+    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+    threshold = 0.8
+    loc = np.where(res >= threshold)
+    rectangles = []
+    for pt in zip(*loc[::-1]):
+        rectangles.append((pt[0], pt[1], w, h))
+    return rectangles, img_gray
+
+
+def find_polygons(image: np.ndarray,
+                  rectangles: tp.List[tp.Tuple[int, int, int, int]],
+                  save_path: tp.Optional[pathlib.PurePath] = None
+                  ) -> tp.List[geometry_utils.Polygon]:
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    for x, y, w, h in rectangles:
+        mask[y:y + h, x:x + w] = 255
+    masked_image = cv2.bitwise_and(image, image, mask=mask)
+    edges = detect_edges(masked_image, save_path=save_path)
+    all_contours = find_contours(edges)
+    polygons = [
+        poly for poly in (geometry_utils.approx_poly(contour) for contour in all_contours)
+        if len(poly) == 4 and geometry_utils.all_approx_square(poly)
+    ]
+    return polygons
 
 
 def get_dimensions(image: np.ndarray) -> tp.Tuple[int, int]:
@@ -205,9 +240,16 @@ def bw_to_bgr(image: np.ndarray) -> np.ndarray:
 def draw_polygons(image: np.ndarray,
                   polygons: tp.List[geometry_utils.Polygon],
                   full_save_path: tp.Optional[pathlib.PurePath] = None,
+                  labels: tp.Optional[tp.List[int]] = None,
                   thickness: int = 1) -> np.ndarray:
     points = [np.array([[p.x, p.y] for p in poly], np.int32).reshape((-1, 1, 2)) for poly in polygons]
     result = cv2.polylines(bw_to_bgr(image), points, True, (0, 0, 255), thickness)
+    if labels:
+        for label, poly in zip(labels, polygons):
+            # print(label,poly)
+            centroid = geometry_utils.guess_centroid(poly)
+            cv2.putText(result, str(label), (int(centroid.x), int(centroid.y)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
+    # cv2.imwrite('83.png', result)
     if full_save_path:
         save_image(full_save_path, result)
     return result
