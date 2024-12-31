@@ -155,7 +155,7 @@ def extend_ray(a: Point, b: Point, distance: float):
     return Point(b.x + dx, b.y + dy)
 
 
-class ChangeOfBasisTransformer():
+class ChangeOfBasisTransformer:
     def __init__(self, origin: Point, bottom_left: Point, bottom_right: Point):
         target_origin = Point(0, 0)
         target_bl = Point(0, 1)
@@ -204,6 +204,11 @@ def guess_centroid(quadrilateral: Polygon) -> Point:
     return Point(math_utils.mean([max(xs), min(xs)]),
                  math_utils.mean([max(ys), min(ys)]))
 
+def get_centroid(polygon: Polygon) -> Point:
+    """Calculate the centroid of a polygon."""
+    xs = [point.x for point in polygon]
+    ys = [point.y for point in polygon]
+    return Point(sum(xs) / len(xs), sum(ys) / len(ys))
 
 class Corner(enum.Enum):
     TL = (1, 0)

@@ -65,12 +65,15 @@ class GridGroupInfo:
 class FormVariant:
     fields: tp.Dict[Field, tp.Optional[GridGroupInfo]]
     questions: tp.List[GridGroupInfo]
+    questions_per_column: int
     num_questions: int
 
     def __init__(self, fields: tp.Dict[Field, tp.Optional[GridGroupInfo]],
-                 questions: tp.List[GridGroupInfo]):
+                 questions: tp.List[GridGroupInfo],
+                 questions_per_column: int = 25):
         self.fields = fields
         self.questions = questions
+        self.questions_per_column = questions_per_column
         self.num_questions = len(questions)
 
 
@@ -97,7 +100,7 @@ form_75q = FormVariant(
                       field_orientation=Orientation.HORIZONTAL)
     }, [
         GridGroupInfo(3 + (6 * (i // 25)),
-                      21 + i - (25 * (i // 25)),
+                      21 + i % 25,
                       fields_type=FieldType.NUMBER,
                       field_length=4,
                       field_orientation=Orientation.HORIZONTAL)
@@ -123,9 +126,11 @@ form_150q = FormVariant(
                       field_length=4,
                       field_orientation=Orientation.HORIZONTAL)
         for i in range(150)
-    ])
+    ],
+    questions_per_column=25
+)
 
 
 class dimensions:
-    vertical_cells = 39
-    horizontal_cells = 52
+    vertical_cells = GRID_VERTICAL_CELLS
+    horizontal_cells = GRID_HORIZONTAL_CELLS
