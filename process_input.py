@@ -50,8 +50,10 @@ def process_input(
 
             if progress_tracker:
                 progress_tracker.set_status(f"Processing '{image_path.name}'.")
+                print(image_utils.barcode_data)
             else:
                 print(f"Processing '{image_path.name}'.")
+                print(image_utils.barcode_data)
 
             img = image_utils.get_image(image_path, save_path=debug_path)
 
