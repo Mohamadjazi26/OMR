@@ -4,6 +4,8 @@ from pathlib import Path
 from datetime import datetime
 from time import sleep
 
+import cv2
+
 import data_exporting
 import image_utils
 import corner_finding
@@ -30,6 +32,7 @@ def process_input(
 
     answers_results = data_exporting.OutputSheet([x for x in grid_i.Field],
                                                  form_variant.num_questions)
+
     keys_results = data_exporting.OutputSheet([grid_i.Field.TEST_FORM_CODE, grid_i.Field.IMAGE_FILE],
                                               form_variant.num_questions)
 
@@ -50,15 +53,14 @@ def process_input(
 
             if progress_tracker:
                 progress_tracker.set_status(f"Processing '{image_path.name}'.")
-                print(image_utils.barcode_data)
             else:
                 print(f"Processing '{image_path.name}'.")
-                print(image_utils.barcode_data)
 
             img = image_utils.get_image(image_path, save_path=debug_path)
 
             img_delogo = image_utils.detect_and_remove_logo(img, save_path=debug_path)
             image = image_utils.detect_and_decode_barcode(img_delogo, save_path=debug_path)
+            # print(image_utils.barcode_data)
 
             prepared_image = image_utils.prepare_scan_for_processing(
                 image, save_path=debug_path)
@@ -78,7 +80,7 @@ def process_input(
             grid = grid_r.Grid(corners,
                                grid_i.GRID_HORIZONTAL_CELLS,
                                grid_i.GRID_VERTICAL_CELLS,
-                               morphed_image,
+                               prepared_image,
                                save_path=debug_path)
 
             # Calculate fill percent for every bubble
@@ -92,44 +94,64 @@ def process_input(
                 for question in form_variant.questions
             ]
 
+            # sleep(20)
             # Calculate the fill threshold
+            # _, threshold = cv2.threshold(prepared_image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
             threshold = grid_r.calculate_bubble_fill_threshold(
                 field_fill_percents,
                 answer_fill_percents,
                 save_path=debug_path,
                 form_variant=form_variant)
 
+            # sleep(20)
             # Get the answers for questions
+            # print(form_variant.num_questions)
+            # sleep(1000)
             answers = [
                 grid_r.read_answer_as_string(i, grid, multi_answers_as_f,
                                              threshold, form_variant,
                                              answer_fill_percents[i])
                 for i in range(form_variant.num_questions)
             ]
+            # answers = [
+            #     grid_r.read_answers(grid,threshold,form_variant)
+            # ]
+            # answers = grid_r.field_group_to_string(answers)
+
+            # print(answers)
+            # sleep(20)
 
             field_data: tp.Dict[grid_i.RealOrVirtualField, str] = {
                 grid_i.Field.IMAGE_FILE: image_path.name,
             }
             #---------------------------------------------------------------------------
-            #Read the Student ID. If it indicates this exam is a key, treat it as such
-            student_id = grid_r.read_field_as_string(
-                grid_i.Field.STUDENT_ID, grid, threshold, form_variant,
-                field_fill_percents[grid_i.Field.STUDENT_ID])
-            if student_id == grid_i.KEY_STUDENT_ID:
-                form_code_field = grid_i.Field.TEST_FORM_CODE
-                field_data[form_code_field] = grid_r.read_field_as_string(
-                    form_code_field, grid, threshold, form_variant,
-                    field_fill_percents[form_code_field]) or ""
-                keys_results.add(field_data, answers)
+            # Process all papers and store their filled data
+            # student_id = grid_r.read_field_as_string(
+            #     grid_i.Field.STUDENT_ID, grid, threshold, form_variant,
+            #     field_fill_percents[grid_i.Field.STUDENT_ID])
+            # if student_id == grid_i.KEY_STUDENT_ID:
+            #     form_code_field = grid_i.Field.TEST_FORM_CODE
+            #     field_data[form_code_field] = grid_r.read_field_as_string(
+            #         form_code_field, grid, threshold, form_variant,
+            #         field_fill_percents[form_code_field]) or ""
+            #     keys_results.add(field_data, answers)
+            # else:
+            for field in form_variant.fields.keys():
+                field_value = grid_r.read_field_as_string(
+                    field, grid, threshold, form_variant,
+                    field_fill_percents[field])
+                if field_value is not None:
+                    field_data[field] = field_value
+            # print(field_data)
+            # print(len(answers))
+            #
+            # print(answers)
+            #
+            # sleep(20)
+            answers_results.add(field_data, answers)
+            # answers_results.add(field_data, answers[0])
 
-            else:
-                for field in form_variant.fields.keys():
-                    field_value = grid_r.read_field_as_string(
-                        field, grid, threshold, form_variant,
-                        field_fill_percents[field])
-                    if field_value is not None:
-                        field_data[field] = field_value
-                answers_results.add(field_data, answers)
             if progress_tracker:
                 progress_tracker.step_progress()
             #---------------------------------------------------------------------------
@@ -141,7 +163,7 @@ def process_input(
             #         field_data[f"Q{i + 1}"] = str(answer)
             #
             # answers_results.add(field_data, [])
-
+        # print(answers_results.data)
         answers_results.clean_up(
             replace_empty_with="G" if empty_answers_as_g else "")
         answers_results.save(output_folder,

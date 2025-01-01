@@ -36,7 +36,6 @@ def find_corner_marks(image: np.ndarray,
             hexagons.append(poly)
         elif len(poly) == 4 and math_utils.all_approx_equal([abs(poly[0].x - poly[1].x), abs(poly[1].y - poly[2].y)],tolerance=0.15):
             quadrilaterals.append(poly)
-    print(len(quadrilaterals))
 
     if save_path:
         image_utils.draw_polygons(image, quadrilaterals, save_path / "all_quadrilaterals.jpg",labels=list(range(len(quadrilaterals))))

@@ -29,8 +29,10 @@ RealOrVirtualField = tp.Union[Field, VirtualField]
 
 
 class FieldType(enum.Enum):
+    Answer = enum.auto()
     LETTER = enum.auto()
     NUMBER = enum.auto()
+
 
 
 class GridGroupInfo:
@@ -100,9 +102,9 @@ form_75q = FormVariant(
                       field_orientation=Orientation.HORIZONTAL)
     }, [
         GridGroupInfo(3 + (6 * (i // 25)),
-                      21 + i % 25,
-                      fields_type=FieldType.NUMBER,
+                      21 + i - (25 * (i // 25)),
                       field_length=4,
+                      fields_type=FieldType.NUMBER,
                       field_orientation=Orientation.HORIZONTAL)
         for i in range(75)
     ])
@@ -122,7 +124,6 @@ form_150q = FormVariant(
     }, [
         GridGroupInfo(3 + (6 * (i // 25)),
                       21 + i - (25 * (i // 25)),
-                      fields_type=FieldType.NUMBER,
                       field_length=4,
                       field_orientation=Orientation.HORIZONTAL)
         for i in range(150)

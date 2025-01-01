@@ -112,7 +112,6 @@ def find_squares(image):
     rectangles = []
     for pt in zip(*loc[::-1]):
         rectangles.append((pt[0], pt[1], w, h))
-    print(len(rectangles))
     return rectangles
 
 
@@ -158,11 +157,16 @@ def prepare_scan_for_processing(image: np.ndarray,
 
 
 def get_fill_percent(matrix: tp.Union[np.ndarray, ma.MaskedArray]) -> float:
+    # try:
+    #     return 1 - (matrix.mean() / 255)
+    # except ZeroDivisionError:
+    #     return 0
     try:
-        return 1 - (matrix.mean() / 255)
+        fill_ratio = np.sum(matrix < 128) / matrix.size
+
+        return fill_ratio
     except ZeroDivisionError:
         return 0
-
 
 def dilate(image: np.ndarray,
            save_path: tp.Optional[pathlib.PurePath] = None) -> np.ndarray:
@@ -189,7 +193,6 @@ def draw_polygons(image: np.ndarray,
             # print(label,poly)
             centroid = geometry_utils.guess_centroid(poly)
             cv2.putText(result, str(label), (int(centroid.x), int(centroid.y)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 1)
-    # cv2.imwrite('83.png', result)
     if full_save_path:
         save_image(full_save_path, result)
     return result

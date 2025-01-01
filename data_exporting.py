@@ -49,6 +49,7 @@ def save_csv(data: tp.List[tp.List[str]], path: pathlib.PurePath):
         writer = csv.writer(f)
         writer.writerows(data)
 
+
 class OutputSheet:
     # Must be structured as: field_a, field_b, ..., Q1, Q2, Q3, ...
     data: tp.List[tp.List[str]]

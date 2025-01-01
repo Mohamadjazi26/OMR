@@ -1,8 +1,9 @@
-"""Functions for establishing and reading the grid."""
 
 import abc
 import pathlib
 import typing as tp
+from time import sleep
+from scipy import stats
 
 import cv2
 import numpy as np
@@ -15,7 +16,7 @@ import image_utils
 import list_utils
 
 
-GRID_CELL_CROP_FRACTION = 0.05
+GRID_CELL_CROP_FRACTION = 0.25
 
 Polygon = tp.List[geometry_utils.Point]
 
@@ -102,6 +103,7 @@ class Grid:
         center = (round(mask.shape[0] / 2), round(mask.shape[1] / 2))
         circle_radius = (unit_dimension / 2) * (1 -
                                                 (GRID_CELL_CROP_FRACTION / 2))
+        # Create a circular mask to isolate the inner region of the cell for analysis
         cv2.circle(mask, center, int(circle_radius), (0, 0, 0), -1)
         masked = ma.masked_array(unmasked, mask)
         return masked
@@ -148,6 +150,21 @@ class _GridField(abc.ABC):
             i for i in range(self.num_cells) if fill_percents[i] > threshold
         ]
         return filled
+    # def _read_value_indexes(self, threshold: float,
+    #                         fill_percents: tp.List[float]) -> tp.List[int]:
+    #
+    #     filled_indexes = []
+    #     for i in range(self.num_cells):
+    #         if fill_percents[i] > threshold:
+    #             filled_indexes.append(i)
+    #     return filled_indexes
+        # filled_indexes = [
+        #     i for i in range(self.num_cells) if fill_percents[i] > threshold
+        # ]
+        # if any(filled_indexes):
+        #     return filled_indexes
+        # else:
+        #     return []
 
     def get_cell_matrixes(self) -> tp.List[ma.MaskedArray]:
         results: tp.List[ma.MaskedArray] = []
@@ -162,6 +179,7 @@ class _GridField(abc.ABC):
         return results
 
     def get_all_fill_percents(self) -> tp.List[float]:
+        # Calculate the percentage of each cell (bubble) that is filled
         results = [
             image_utils.get_fill_percent(square)
             for square in self.get_cell_matrixes()
@@ -183,6 +201,30 @@ class LetterGridField(_GridField):
             for i in super()._read_value_indexes(threshold, fill_percents)
         ]
 
+# class AnswerGridField(_GridField):
+#     def __init__(self, grid: Grid, horizontal_start: int, vertical_start: int,
+#                  orientation: geometry_utils.Orientation, num_cells: int):
+#         super().__init__(grid, horizontal_start, vertical_start, orientation, num_cells)
+#         self.threshold = None
+
+class AnswerGridField(_GridField):
+    def set_threshold(self, threshold: float) -> None:
+        self.threshold = threshold
+
+    def read_value(self, threshold: float,
+                   fill_percents: tp.List[float]) -> tp.Tuple[tp.Optional[int], str]:
+
+        if len(fill_percents) != self.num_cells:
+            raise ValueError(f"Expected {self.num_cells} bubbles, but received {len(fill_percents)}.")
+
+        filled_bubble_indexes = super()._read_value_indexes(threshold or self.threshold, fill_percents)
+
+        if len(filled_bubble_indexes) == 1:
+            return filled_bubble_indexes[0], "Single bubble above threshold."
+        elif len(filled_bubble_indexes) == 0:
+            return None, "No bubbles exceeded the threshold."
+        else:
+            return None, "Multiple bubbles exceeded the threshold."
 
 class _GridFieldGroup(abc.ABC):
 
@@ -247,11 +289,46 @@ class LetterGridFieldGroup(_GridFieldGroup):
         return tp.cast(tp.List[tp.List[str]],
                        super().read_value(threshold, fill_percents))
 
+class AnswerGridFieldGroup(_GridFieldGroup):
+
+    def __init__(self, grid: Grid, horizontal_start: int, vertical_start: int,
+                 num_fields: int, field_length: int,
+                 field_orientation: geometry_utils.Orientation):
+        if num_fields <= 0:
+            raise ValueError("num_fields must be greater than 0.")
+
+        if field_orientation not in [geometry_utils.Orientation.HORIZONTAL, geometry_utils.Orientation.VERTICAL]:
+            raise ValueError("Invalid field orientation specified.")
+
+        fields_vertical = field_orientation is geometry_utils.Orientation.VERTICAL
+        self.fields = []
+        for i in range(num_fields):
+            x = horizontal_start + i if fields_vertical else horizontal_start
+            y = vertical_start + i if not fields_vertical else vertical_start
+
+            if x >= grid.horizontal_cells or y >= grid.vertical_cells:
+                raise ValueError(f"Field coordinates ({x}, {y}) exceed grid dimensions.")
+
+            self.fields.append(
+                AnswerGridField(grid, x, y, field_orientation, field_length)
+            )
+
+    def read_value(self, threshold: float,
+                   fill_percents: tp.List[tp.List[float]]) -> tp.List[tp.Optional[int]]:
+        result = []
+        for field in self.fields:
+            field_value = field.read_value(threshold, fill_percents)
+            result.append(field_value)
+        return result
 
 def get_group_from_info(info: grid_info.GridGroupInfo,
                         grid: Grid) -> _GridFieldGroup:
     if info.fields_type is grid_info.FieldType.LETTER:
         return LetterGridFieldGroup(grid, info.horizontal_start,
+                                    info.vertical_start, info.num_fields,
+                                    info.field_length, info.field_orientation)
+    elif info.fields_type is grid_info.FieldType.Answer:
+        return AnswerGridFieldGroup(grid, info.horizontal_start,
                                     info.vertical_start, info.num_fields,
                                     info.field_length, info.field_orientation)
     else:
@@ -260,7 +337,8 @@ def get_group_from_info(info: grid_info.GridGroupInfo,
                                     info.field_length, info.field_orientation)
 
 
-def read_field(field: grid_info.Field, grid: Grid, threshold: float,
+
+def read_field(field: grid_info.Field, grid: Grid, threshold: tp.Optional[float],
                form_variant: grid_info.FormVariant,
                fill_percents: tp.List[tp.List[float]]
                ) -> tp.Optional[tp.List[tp.Union[tp.List[str], tp.List[int]]]]:
@@ -304,7 +382,7 @@ def read_field_as_string(field: grid_info.Field, grid: Grid, threshold: float,
     if field_group is not None:
         return field_group_to_string(field_group)
     else:
-        return None
+        return ''
 
 
 def read_answers(grid: Grid, threshold: float, form_variant: grid_info.FormVariant) -> tp.List[tp.Optional[int]]:
@@ -333,6 +411,7 @@ class MultipleChoiceGridField:
     def read_value(self, threshold: float) -> tp.Optional[int]:
         cell_matrix = self.grid.get_masked_cell_matrix(self.horizontal_index, self.vertical_index)
         fill_percent = image_utils.get_fill_percent(cell_matrix)
+        # Determine if the bubble is filled by comparing the fill percentage to a threshold
         if fill_percent > threshold:
             return self.horizontal_index % 4
         else:
@@ -348,42 +427,64 @@ class MultipleChoiceGridFieldGroup:
     def read_values(self, threshold: float) -> tp.List[tp.Optional[int]]:
         return [field.read_value(threshold) for field in self.fields]
 
-# def calculate_bubble_fill_threshold(grid: Grid, form_variant: grid_info.FormVariant,
-#                                     save_path: tp.Optional[pathlib.PurePath] = None) -> float:
-#     answer_field_group = MultipleChoiceGridFieldGroup(grid, 2, 32, form_variant.num_questions)
-#     fill_percents = [field.read_value(0.0) for field in answer_field_group.fields]
-#     sorted_fill_percents = sorted([x for x in fill_percents if x is not None])
-#
-#     if len(sorted_fill_percents) < 4:
-#         return 0.5
-#
-#     last_quarter = sorted_fill_percents[-round(len(sorted_fill_percents) / 4):]
-#     differences = [last_quarter[i + 1] - last_quarter[i] for i in range(len(last_quarter) - 1)]
-#     biggest_diff_index = list_utils.find_greatest_value_indexes(differences, 1)[0]
-#     return (last_quarter[biggest_diff_index] + last_quarter[biggest_diff_index + 1]) / 2
-
 #-------------------------------------------------------------------------------------------
+
+
+# def calculate_bubble_fill_threshold(
+#         field_fill_percents: tp.Dict[grid_info.Field, tp.List[tp.List[float]]],
+#         answer_fill_percents: tp.List[tp.List[tp.List[float]]],
+#         form_variant: grid_info.FormVariant,
+#         save_path: tp.Optional[pathlib.PurePath] = None) -> float:
+#
+#     fill_percents_lists = list(
+#         field_fill_percents.values()) + answer_fill_percents
+#     fill_percents = [np.array(l).flatten() for l in fill_percents_lists]
+#     sorted_and_flattened = np.sort(np.concatenate(fill_percents))
+#     last_chunk = sorted_and_flattened[-round(sorted_and_flattened.size / 5):]
+#     differences = [
+#         last_chunk[i + 1] - last_chunk[i] for i in range(last_chunk.size - 1)
+#     ]
+#     biggest_diff_index = list_utils.find_greatest_value_indexes(
+#         differences, 1)[0]
+#     result = (last_chunk[biggest_diff_index] +
+#               last_chunk[biggest_diff_index + 1]) / 2
+#
+#     if save_path:
+#         with open(str(save_path / "threshold_values.txt"), "w+") as file:
+#             file.writelines([str(sorted_and_flattened), "\n\n", str(result)])
+#     return result
+
+
 def calculate_bubble_fill_threshold(
         field_fill_percents: tp.Dict[grid_info.Field, tp.List[tp.List[float]]],
         answer_fill_percents: tp.List[tp.List[tp.List[float]]],
         form_variant: grid_info.FormVariant,
         save_path: tp.Optional[pathlib.PurePath] = None) -> float:
 
-    fill_percents_lists = list(
-        field_fill_percents.values()) + answer_fill_percents
-    fill_percents = [np.array(l).flatten() for l in fill_percents_lists]
-    sorted_and_flattened = np.sort(np.concatenate(fill_percents))
-    last_chunk = sorted_and_flattened[-round(sorted_and_flattened.size / 5):]
-    differences = [
-        last_chunk[i + 1] - last_chunk[i] for i in range(last_chunk.size - 1)
-    ]
-    biggest_diff_index = list_utils.find_greatest_value_indexes(
-        differences, 1)[0]
-    result = (last_chunk[biggest_diff_index] +
-              last_chunk[biggest_diff_index + 1]) / 2
+    # 1. Data Collection
+    fill_percents = np.concatenate([
+        np.array(l).flatten()
+        for l in list(field_fill_percents.values()) + answer_fill_percents
+    ])
+
+    # 2. Outlier Removal (Optional)
+    z_scores = stats.zscore(fill_percents)
+    outlier_mask = np.abs(z_scores) < 3  # Remove values more than 3 standard deviations from the mean
+    fill_percents = fill_percents[outlier_mask]
+
+    # 3. Sorting and Chunking
+    sorted_fill_percents = np.sort(fill_percents)
+    chunk_size = int(len(sorted_fill_percents) * 0.2)  # 20% chunk size
+    last_chunk = sorted_fill_percents[-chunk_size:]
+
+    # 4. Threshold Calculation (using IQR)
+    q75, q25 = np.percentile(last_chunk, [75, 25])
+    iqr = q75 - q25
+    threshold = q75 + 1.5 * iqr  # 1.5 IQR rule for outlier detection
+
+    # 5. Saving (Optional)
     if save_path:
         with open(str(save_path / "threshold_values.txt"), "w+") as file:
-            file.writelines([str(sorted_and_flattened), "\n\n", str(result)])
-    return result
+            file.writelines([str(sorted_fill_percents), "\n\n", str(threshold)])
 
-
+    return threshold
